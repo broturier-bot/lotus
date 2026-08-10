@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#F3F7F5">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Lotus</title>
+<link rel="manifest" href="manifest.json">
+<style>
+/* ============================================================
+   JETONS DE DESIGN — modifie ici, pas plus bas.
+   ============================================================ */
+:root{
+  --water:#F3F7F5;      /* fond, eau claire */
+  --mist:#FFFFFF;       /* cartes */
+  --deep:#1C453D;       /* texte principal, vert profond */
+  --stem:#4E7365;       /* texte secondaire — foncé pour rester lisible (5.3:1) */
+  --stem-soft:#8FA89C;  /* filets, icônes, contours — jamais de texte */
+  --leaf:#2F6B54;       /* action */
+  --lotus:#D4879F;      /* fleur, halos, fonds roses */
+  --lotus-ink:#A94E6C;  /* rose lisible, pour le texte et les glyphes (5.3:1) */
+  --line:rgba(143,168,156,.30);
+  --shadow:0 2px 4px rgba(28,69,61,.03), 0 14px 34px rgba(28,69,61,.07);
+  --serif:Georgia,"Noto Serif","Times New Roman",serif;
+  --sans:system-ui,-apple-system,"Roboto","Segoe UI",sans-serif;
+  --r:28px;
+  --tab-h:72px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  min-height:100vh;
+  background:
+    radial-gradient(130% 58% at 50% -6%, #FFFFFF 0%, rgba(255,255,255,0) 70%),
+    radial-gradient(70% 40% at 100% 100%, rgba(212,135,159,.20) 0%, rgba(212,135,159,0) 72%),
+    radial-gradient(60% 34% at 0% 96%, rgba(60,122,102,.06) 0%, rgba(60,122,102,0) 70%),
+    var(--water);
+  background-attachment:fixed;
+  color:var(--deep);
+  font-family:var(--sans);
+  font-size:16px;line-height:1.5;
+  -webkit-text-size-adjust:100%;
+}
+button{font:inherit;color:inherit;cursor:pointer}
+input,textarea{font:inherit;color:inherit}
+.eyebrow{
+  font-family:var(--sans);font-size:11.5px;font-weight:600;
+  letter-spacing:.24em;text-transform:uppercase;color:var(--stem);
+}
+
+/* ---------- en-tête ---------- */
+.topbar{
+  display:flex;align-items:center;gap:12px;
+  max-width:620px;margin:0 auto;
+  padding:calc(env(safe-area-inset-top,0px) + 30px) 20px 10px;
+}
+.mark{width:62px;height:44px;flex:none}
+.titles{flex:1;min-width:0}
+.titles h1{
+  margin:0;font-family:var(--serif);font-size:31px;font-weight:400;
+  letter-spacing:.004em;line-height:1.05;
+}
+.titles p{margin:5px 0 0}
+.iconbtn{
+  display:grid;place-items:center;flex:none;
+  width:46px;height:46px;padding:0;
+  background:var(--mist);border:1px solid var(--line);border-radius:50%;
+  color:var(--stem);box-shadow:var(--shadow);
+  transition:transform .16s ease, color .16s ease;
+}
+.iconbtn:active{transform:scale(.94);color:var(--leaf)}
+.iconbtn svg{width:21px;height:21px;display:block}
+
+main{
+  max-width:620px;margin:0 auto;
+  padding:14px 20px calc(var(--tab-h) + env(safe-area-inset-bottom,0px) + 30px);
+}
+.view[hidden]{display:none}
+
+/* ---------- lotus ---------- */
+.petal{transform-box:fill-box;transform-origin:50% 100%}
+.bloom .petal{animation:bloom .62s cubic-bezier(.22,1.1,.36,1) backwards}
+.bloom .p3{animation-delay:0s}
+.bloom .p2,.bloom .p4{animation-delay:.09s}
+.bloom .p1,.bloom .p5{animation-delay:.18s}
+@keyframes bloom{
+  from{transform:scale(.22) translateY(6px);opacity:.15}
+  60%{transform:scale(1.06) translateY(0);opacity:1}
+  to{transform:scale(1) translateY(0);opacity:1}
+}
+.ripple{transform-box:fill-box;transform-origin:50% 50%;opacity:0}
+.bloom .ripple{animation:ripple 1s ease-out .18s backwards}
+@keyframes ripple{
+  from{transform:scale(.5);opacity:.5}
+  to{transform:scale(1.5);opacity:0}
+}
+
+/* ---------- champs ---------- */
+.field{
+  background:var(--mist);
+  border:1px solid var(--line);border-radius:var(--r);
+  box-shadow:var(--shadow);
+  padding:20px 22px 22px;margin-bottom:16px;
+  transition:border-color .2s ease;
+}
+.field-head{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.field-head .lab{flex:1;min-width:0;overflow-wrap:anywhere}
+.helpbtn{
+  flex:none;width:34px;height:34px;padding:0;line-height:1;
+  font-size:14px;font-weight:600;
+  background:rgba(212,135,159,.15);color:var(--lotus-ink);
+  border:0;border-radius:50%;
+}
+.helpbtn:active{background:rgba(212,135,159,.26)}
+.field textarea{
+  display:block;width:100%;min-height:62px;padding:0 0 10px;
+  background:transparent;border:0;border-bottom:1.5px solid var(--line);
+  border-radius:0;resize:vertical;outline:none;
+  transition:border-color .2s ease;
+}
+.field textarea::placeholder{color:var(--stem-soft)}
+.field textarea:focus{border-bottom-color:var(--leaf)}
+.field.invalid{border-color:rgba(212,135,159,.6)}
+.field .err{margin:10px 0 0;font-size:12.5px;color:var(--lotus-ink)}
+
+/* ---------- boutons ---------- */
+.btn{
+  display:block;width:100%;padding:19px;
+  font-size:14px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;
+  background:var(--leaf);color:#fff;
+  border:0;border-radius:999px;
+  box-shadow:0 10px 30px rgba(47,107,84,.28), 0 0 26px rgba(47,107,84,.14);
+  transition:transform .14s ease, box-shadow .14s ease;
+}
+.btn:active{transform:translateY(1px) scale(.99);box-shadow:0 4px 14px rgba(47,107,84,.24)}
+.btn.ghost{background:var(--mist);color:var(--leaf);border:1.5px solid rgba(47,107,84,.4);box-shadow:none}
+.btn.ghost:active{background:rgba(60,122,102,.07)}
+.btn.danger{background:var(--mist);color:var(--lotus-ink);border:1.5px solid rgba(169,78,108,.45);box-shadow:none}
+.btn.danger:active{background:rgba(212,135,159,.08)}
+.btn+.btn{margin-top:11px}
+.saved-hint{
+  text-align:center;margin:14px 0 0;height:18px;
+  color:var(--leaf);font-size:13.5px;opacity:0;
+  transition:opacity .3s ease;
+}
+.saved-hint.on{opacity:1}
+
+/* ---------- registre ---------- */
+.logbar{display:flex;align-items:center;gap:9px;margin:2px 0 18px}
+.count{flex:1}
+.minibtn{
+  padding:9px 14px;font-size:13px;
+  background:var(--mist);border:1px solid var(--line);border-radius:999px;
+  color:var(--stem);box-shadow:var(--shadow);
+}
+.minibtn:active{color:var(--leaf)}
+.daychip{
+  display:flex;align-items:center;gap:11px;
+  margin:26px 0 12px;
+}
+.day:first-child .daychip{margin-top:0}
+.daychip span{
+  font-family:var(--serif);font-size:15px;font-style:italic;color:var(--stem);
+  white-space:nowrap;
+}
+.daychip i{flex:1;height:1px;background:var(--line);display:block}
+.rec{
+  position:relative;
+  background:var(--mist);border:1px solid var(--line);border-radius:var(--r);
+  box-shadow:var(--shadow);
+  padding:15px 17px 17px;margin-bottom:11px;
+}
+.rec-time{font-size:12.5px;color:var(--stem);letter-spacing:.04em}
+.rec-del{
+  position:absolute;top:11px;right:11px;
+  width:36px;height:36px;padding:0;line-height:1;font-size:18px;
+  background:transparent;border:0;border-radius:50%;color:var(--stem-soft);
+}
+.rec-del:active{color:var(--lotus-ink);background:rgba(212,135,159,.12)}
+.cell{margin-top:11px}
+.cell .k{
+  font-size:11px;font-weight:600;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--stem);margin-bottom:1px;
+}
+.cell .v{overflow-wrap:anywhere;white-space:pre-wrap}
+.orig{
+  margin-top:12px;padding-top:9px;border-top:1px dashed var(--line);
+  font-size:11.5px;color:var(--stem);font-style:italic;
+}
+.confirm{display:flex;align-items:center;gap:9px;flex-wrap:wrap;font-size:14px;color:var(--deep)}
+.confirm .sp{flex:1}
+.empty{padding:40px 6px;text-align:center;color:var(--stem)}
+.empty b{
+  display:block;margin-bottom:8px;color:var(--deep);
+  font-family:var(--serif);font-size:19px;font-weight:400;
+}
+
+/* ---------- panneau ---------- */
+.sheet{
+  position:fixed;inset:0;z-index:40;
+  display:flex;align-items:flex-end;justify-content:center;
+  background:rgba(28,69,61,.32);backdrop-filter:blur(2px);
+}
+.sheet[hidden]{display:none}
+.sheet-inner{
+  width:100%;max-width:620px;max-height:78vh;overflow:auto;
+  background:var(--mist);border-radius:28px 28px 0 0;
+  padding:26px 22px calc(env(safe-area-inset-bottom,0px) + 22px);
+  animation:rise .24s cubic-bezier(.22,1,.36,1);
+}
+@keyframes rise{from{transform:translateY(20px);opacity:.4}to{transform:none;opacity:1}}
+.sheet h2{
+  margin:0 0 18px;font-family:var(--serif);font-size:20px;font-weight:400;
+}
+.rule-block+.rule-block{margin-top:18px;border-top:1px solid var(--line);padding-top:16px}
+.rule-block .rk{font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--stem)}
+.rule-block .rv{margin-top:6px;white-space:pre-wrap;overflow-wrap:anywhere}
+.rule-block .rv.none{color:var(--stem);font-style:italic}
+
+/* ---------- paramètres ---------- */
+.sec{margin:30px 0 12px}
+.sec:first-child{margin-top:2px}
+.cfg{
+  background:var(--mist);border:1px solid var(--line);border-radius:var(--r);
+  box-shadow:var(--shadow);padding:16px 18px 18px;margin-bottom:13px;
+}
+.cfg .n{font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--lotus-ink)}
+.cfg label{display:block;margin-top:13px;font-size:12.5px;color:var(--stem)}
+.cfg input::placeholder,.cfg textarea::placeholder{color:var(--stem-soft)}
+.cfg input,.cfg textarea{
+  display:block;width:100%;margin-top:3px;padding:6px 0;
+  background:transparent;border:0;border-bottom:1.5px solid var(--line);
+  border-radius:0;outline:none;
+}
+.cfg textarea{min-height:60px;resize:vertical}
+.cfg input:focus,.cfg textarea:focus{border-bottom-color:var(--leaf)}
+.note{color:var(--stem);font-size:14px;margin:0 0 16px;line-height:1.55}
+
+/* ---------- onglets ---------- */
+.tabs{
+  position:fixed;left:0;right:0;bottom:0;z-index:30;
+  display:flex;
+  background:rgba(255,255,255,.92);backdrop-filter:blur(14px);
+  border-top:1px solid var(--line);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+.tabs[hidden]{display:none}
+.tab{
+  flex:1;height:var(--tab-h);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  background:transparent;border:0;
+  font-size:11px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--stem);transition:color .18s ease;
+}
+.tab svg{width:21px;height:21px}
+.tab[aria-selected="true"]{color:var(--leaf)}
+.banner{background:var(--lotus);color:#fff;padding:13px 18px;font-size:14px}
+.banner[hidden]{display:none}
+@media (prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important}
+}
+</style>
+</head>
+<body>
+
+<div class="banner" id="banner" hidden></div>
+
+<header class="topbar">
+  <svg class="mark" id="mark" viewBox="0 0 120 80" aria-hidden="true">
+    <ellipse class="ripple" cx="60" cy="70" rx="34" ry="6" fill="none" stroke="#D4879F" stroke-width="1.2"/>
+    <g fill="none" stroke="#2F6B54" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round">
+      <g transform="translate(120,0) scale(-1,1)">
+        <path class="petal p1" d="M60 64 C41 63 23 53 17 37 C38 34 55 46 60 64 Z" opacity=".58"/>
+      </g>
+      <g transform="translate(120,0) scale(-1,1)">
+        <path class="petal p2" d="M60 64 C46 57 37 40 40 22 C55 31 65 47 60 64 Z" opacity=".82"/>
+      </g>
+      <path class="petal p3" d="M60 64 C50 50 47 28 60 9 C73 28 70 50 60 64 Z"/>
+      <path class="petal p4" d="M60 64 C46 57 37 40 40 22 C55 31 65 47 60 64 Z" opacity=".82"/>
+      <path class="petal p5" d="M60 64 C41 63 23 53 17 37 C38 34 55 46 60 64 Z" opacity=".58"/>
+    </g>
+    <path d="M18 71 C40 66 80 66 102 71" fill="none" stroke="#2F6B54" stroke-width="1.8" stroke-linecap="round" opacity=".5"/>
+  </svg>
+  <div class="titles">
+    <h1 id="title">Lotus</h1>
+    <p class="eyebrow" id="subtitle">Saisie du jour</p>
+  </div>
+  <button class="iconbtn" id="btnRules" title="Règles de saisie" aria-label="Règles de saisie">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.2A1.7 1.7 0 0 1 5.7 3.5H19v17H5.7A1.7 1.7 0 0 1 4 18.8z"/><path d="M4 17h15"/><path d="M8 7.5h7M8 11h7"/></svg>
+  </button>
+  <button class="iconbtn" id="btnSettings" title="Paramètres" aria-label="Paramètres">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.1"/><path d="M19.2 14.8a1.6 1.6 0 0 0 .32 1.78l.06.06a1.9 1.9 0 1 1-2.7 2.7l-.05-.06a1.6 1.6 0 0 0-1.79-.32 1.6 1.6 0 0 0-.97 1.48v.16a1.9 1.9 0 1 1-3.8 0v-.09a1.6 1.6 0 0 0-1.03-1.46 1.6 1.6 0 0 0-1.78.32l-.06.06a1.9 1.9 0 1 1-2.7-2.7l.06-.06a1.6 1.6 0 0 0 .32-1.78 1.6 1.6 0 0 0-1.47-.98H3.2a1.9 1.9 0 1 1 0-3.8h.09a1.6 1.6 0 0 0 1.46-1.03 1.6 1.6 0 0 0-.32-1.78l-.06-.06a1.9 1.9 0 1 1 2.7-2.7l.06.06a1.6 1.6 0 0 0 1.78.32h.08a1.6 1.6 0 0 0 .97-1.47V3.2a1.9 1.9 0 1 1 3.8 0v.09a1.6 1.6 0 0 0 .98 1.46 1.6 1.6 0 0 0 1.78-.32l.06-.06a1.9 1.9 0 1 1 2.7 2.7l-.06.06a1.6 1.6 0 0 0-.32 1.78v.08a1.6 1.6 0 0 0 1.47.97h.16a1.9 1.9 0 1 1 0 3.8h-.09a1.6 1.6 0 0 0-1.46.98z"/></svg>
+  </button>
+</header>
+
+<main>
+  <section class="view" id="viewSetup" hidden>
+    <p class="note">Trois colonnes, que tu nommes une fois pour toutes — et que tu pourras rouvrir dans les paramètres si l'usage te fait changer d'avis.</p>
+    <div id="setupFields"></div>
+    <button class="btn" id="btnSetupSave">Ouvrir le carnet</button>
+  </section>
+
+  <section class="view" id="viewEntry" hidden>
+    <div id="entryFields"></div>
+    <button class="btn" id="btnSave">Enregistrer</button>
+    <p class="saved-hint" id="savedHint">Ajouté au carnet.</p>
+  </section>
+
+  <section class="view" id="viewLog" hidden>
+    <div class="logbar">
+      <span class="count eyebrow" id="count"></span>
+      <button class="minibtn" id="btnSort">Récent d'abord</button>
+      <button class="minibtn" id="btnExport">CSV</button>
+    </div>
+    <div id="logList"></div>
+  </section>
+
+  <section class="view" id="viewSettings" hidden>
+    <div class="sec eyebrow">Colonnes</div>
+    <p class="note">Renommer une colonne ne touche pas aux saisies déjà faites : chacune garde l'intitulé qui était en place le jour où tu l'as écrite.</p>
+    <div id="cfgFields"></div>
+    <button class="btn" id="btnCfgSave">Enregistrer les modifications</button>
+    <div class="sec eyebrow">Données</div>
+    <button class="btn ghost" id="btnExport2">Exporter en CSV</button>
+    <button class="btn danger" id="btnClear">Vider l&rsquo;historique</button>
+    <button class="btn danger" id="btnReset">Tout réinitialiser</button>
+    <p class="note" style="margin-top:14px">Vider l&rsquo;historique efface les saisies et garde tes colonnes. Tout réinitialiser efface aussi les colonnes et leurs règles.</p>
+    <div class="sec eyebrow">Stockage</div>
+    <p class="note" id="storageNote"></p>
+  </section>
+</main>
+
+<nav class="tabs" id="tabs" hidden>
+  <button class="tab" id="tabEntry" role="tab" aria-selected="true">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19 C9 15.5 8.2 10 12 5 C15.8 10 15 15.5 12 19 Z"/><path d="M12 19 C7.6 18.6 4.4 15.6 3.6 11 C8 10.4 11.2 13.6 12 19 Z"/><path d="M12 19 C16.4 18.6 19.6 15.6 20.4 11 C16 10.4 12.8 13.6 12 19 Z"/></svg>
+    Saisie
+  </button>
+  <button class="tab" id="tabLog" role="tab" aria-selected="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5h16M4 12h16M4 17.5h16"/></svg>
+    Historique
+  </button>
+</nav>
+
+<div class="sheet" id="sheet" hidden>
+  <div class="sheet-inner" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <h2 id="sheetTitle">Règles de saisie</h2>
+    <div id="sheetBody"></div>
+    <button class="btn ghost" id="btnSheetClose" style="margin-top:22px">Fermer</button>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+var K_CFG='t3.config', K_ENT='t3.entries';
+var cfg=null, entries=[], sortDesc=true, pendingDelete=null;
+
+function banner(msg){var b=document.getElementById('banner');b.textContent=msg;b.hidden=false;}
+function load(){
+  try{
+    cfg=JSON.parse(localStorage.getItem(K_CFG)||'null');
+    entries=JSON.parse(localStorage.getItem(K_ENT)||'[]');
+    if(!Array.isArray(entries))entries=[];
+  }catch(e){
+    banner("Impossible de lire les données enregistrées. Le stockage du navigateur est peut-être bloqué.");
+    cfg=null;entries=[];
+  }
+}
+function persist(){
+  try{
+    localStorage.setItem(K_CFG,JSON.stringify(cfg));
+    localStorage.setItem(K_ENT,JSON.stringify(entries));
+    return true;
+  }catch(e){
+    banner("Enregistrement impossible : le stockage est plein ou désactivé. Exporte tes données en CSV.");
+    return false;
+  }
+}
+
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+var fDay=new Intl.DateTimeFormat('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+var fTime=new Intl.DateTimeFormat('fr-FR',{hour:'2-digit',minute:'2-digit'});
+function dayKey(ts){var d=new Date(ts);return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();}
+
+function blossom(){
+  var m=document.getElementById('mark');
+  m.classList.remove('bloom');
+  void m.offsetWidth;
+  m.classList.add('bloom');
+}
+function hint(msg){
+  var h=document.getElementById('savedHint');
+  h.textContent=msg;h.classList.add('on');
+  clearTimeout(hint._t);
+  hint._t=setTimeout(function(){h.classList.remove('on');},2400);
+}
+
+function show(name){
+  ['Setup','Entry','Log','Settings'].forEach(function(v){
+    document.getElementById('view'+v).hidden=(v.toLowerCase()!==name);
+  });
+  document.getElementById('tabs').hidden=!cfg;
+  document.getElementById('btnRules').style.display=cfg?'':'none';
+  document.getElementById('btnSettings').style.display=cfg?'':'none';
+  document.getElementById('tabEntry').setAttribute('aria-selected',name==='entry');
+  document.getElementById('tabLog').setAttribute('aria-selected',name==='log');
+  document.getElementById('subtitle').textContent =
+    name==='setup'?'Premier réglage':name==='settings'?'Paramètres':name==='log'?'Tes saisies':'Saisie du jour';
+  window.scrollTo(0,0);
+}
+
+function cfgForm(container,values){
+  var html='';
+  for(var i=0;i<3;i++){
+    var c=values[i]||{};
+    var nom=c.name||'', regle=c.desc||'';
+    html+='<div class="cfg">'
+      + '<div class="n">Colonne '+(i+1)+'</div>'
+      + '<label for="cn'+i+'">Nom</label>'
+      + '<input id="cn'+i+'" type="text" maxlength="40" value="'+esc(nom)+'" placeholder="Ex. Intention du jour">'
+      + '<label for="cd'+i+'">Règle de saisie (optionnel)</label>'
+      + '<textarea id="cd'+i+'" maxlength="600" placeholder="Ce qu\'il faut mettre dans cette colonne">'+esc(regle)+'</textarea>'
+      + '</div>';
+  }
+  container.innerHTML=html;
+}
+function readCfgForm(){
+  var out=[];
+  for(var i=0;i<3;i++){
+    out.push({
+      name:document.getElementById('cn'+i).value.trim(),
+      desc:document.getElementById('cd'+i).value.trim()
+    });
+  }
+  return out;
+}
+
+function renderEntry(){
+  var html='';
+  cfg.forEach(function(c,i){
+    html+='<div class="field" id="f'+i+'">'
+      + '<div class="field-head">'
+      + '<span class="lab eyebrow">'+esc(c.name)+'</span>'
+      + (c.desc?'<button class="helpbtn" data-help="'+i+'" aria-label="Règle de saisie">?</button>':'')
+      + '</div>'
+      + '<textarea id="v'+i+'" rows="1" aria-label="'+esc(c.name)+'"></textarea>'
+      + '</div>';
+  });
+  document.getElementById('entryFields').innerHTML=html;
+}
+function saveEntry(){
+  var vals=[],missing=false;
+  for(var i=0;i<3;i++){
+    var v=document.getElementById('v'+i).value.trim();
+    var f=document.getElementById('f'+i);
+    var old=f.querySelector('.err'); if(old)old.remove();
+    f.classList.remove('invalid');
+    if(!v){
+      missing=true;f.classList.add('invalid');
+      var p=document.createElement('p');p.className='err';p.textContent='À renseigner';
+      f.appendChild(p);
+    }
+    vals.push(v);
+  }
+  if(missing){hint('Les trois champs sont attendus.');return;}
+  entries.push({
+    id:Date.now()+'-'+Math.random().toString(36).slice(2,7),
+    ts:Date.now(),
+    values:vals,
+    labels:cfg.map(function(c){return c.name;})
+  });
+  if(!persist())return;
+  for(var j=0;j<3;j++)document.getElementById('v'+j).value='';
+  document.getElementById('v0').focus();
+  blossom();
+  hint('Ajouté au carnet.');
+  if(entries.length===50)setTimeout(function(){hint('50 saisies — pense à exporter.');},2600);
+}
+
+function renderLog(){
+  document.getElementById('count').textContent =
+    entries.length+(entries.length>1?' saisies':' saisie');
+  document.getElementById('btnSort').textContent = sortDesc?'Récent d\u2019abord':'Ancien d\u2019abord';
+
+  if(!entries.length){
+    document.getElementById('logList').innerHTML =
+      '<div class="empty"><b>Le carnet est encore vide.</b>Remplis les trois champs dans l\u2019onglet Saisie ; la première ligne se posera ici.</div>';
+    return;
+  }
+  var list=entries.slice().sort(function(a,b){return sortDesc?b.ts-a.ts:a.ts-b.ts;});
+  var html='',lastDay=null;
+  list.forEach(function(e){
+    var k=dayKey(e.ts);
+    if(k!==lastDay){
+      if(lastDay!==null)html+='</div>';
+      html+='<div class="day"><div class="daychip"><span>'+esc(fDay.format(new Date(e.ts)))+'</span><i></i></div>';
+      lastDay=k;
+    }
+    html+='<div class="rec">';
+    if(pendingDelete===e.id){
+      html+='<div class="confirm"><span>Supprimer cette ligne&nbsp;?</span><span class="sp"></span>'
+        + '<button class="minibtn" data-cancel="1">Annuler</button>'
+        + '<button class="minibtn" data-confirm="'+e.id+'" style="color:#A94E6C">Supprimer</button></div>';
+    }else{
+      var labels=e.labels||cfg.map(function(c){return c.name;});
+      var changed=labels.some(function(l,i){return l!==cfg[i].name;});
+      html+='<span class="rec-time">'+esc(fTime.format(new Date(e.ts)))+'</span>'
+        + '<button class="rec-del" data-del="'+e.id+'" aria-label="Supprimer cette ligne">&times;</button>';
+      for(var i=0;i<3;i++){
+        html+='<div class="cell"><div class="k">'+esc(labels[i]||('Colonne '+(i+1)))+'</div>'
+            + '<div class="v">'+esc(e.values[i]||'')+'</div></div>';
+      }
+      if(changed)html+='<div class="orig">Intitulés d\u2019origine</div>';
+    }
+    html+='</div>';
+  });
+  html+='</div>';
+  document.getElementById('logList').innerHTML=html;
+}
+
+function csvCell(s){return '"'+String(s==null?'':s).replace(/"/g,'""')+'"';}
+function exportCSV(){
+  if(!entries.length){hint('Rien à exporter pour l\u2019instant.');return;}
+  var rows=[['Date','Heure',cfg[0].name,cfg[1].name,cfg[2].name].map(csvCell).join(';')];
+  entries.slice().sort(function(a,b){return a.ts-b.ts;}).forEach(function(e){
+    var d=new Date(e.ts);
+    rows.push([
+      d.toLocaleDateString('fr-FR'),
+      d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}),
+      e.values[0],e.values[1],e.values[2]
+    ].map(csvCell).join(';'));
+  });
+  var blob=new Blob(['\ufeff'+rows.join('\r\n')],{type:'text/csv;charset=utf-8'});
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='carnet-'+new Date().toISOString().slice(0,10)+'.csv';
+  document.body.appendChild(a);a.click();
+  setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},1000);
+}
+
+function openRules(only){
+  var html='';
+  cfg.forEach(function(c,i){
+    if(only!=null&&only!==i)return;
+    html+='<div class="rule-block"><div class="rk">'+esc(c.name)+'</div>'
+      + '<div class="rv'+(c.desc?'':' none')+'">'
+      + esc(c.desc||'Aucune règle définie. Tu peux en écrire une dans les paramètres.')
+      + '</div></div>';
+  });
+  document.getElementById('sheetTitle').textContent = only!=null?'Règle de saisie':'Règles de saisie';
+  document.getElementById('sheetBody').innerHTML=html;
+  document.getElementById('sheet').hidden=false;
+}
+
+document.getElementById('btnSetupSave').addEventListener('click',function(){
+  var v=readCfgForm();
+  if(v.some(function(c){return !c.name;})){alert('Donne un nom aux trois colonnes.');return;}
+  cfg=v;
+  if(!persist())return;
+  renderEntry();show('entry');blossom();
+});
+document.getElementById('btnSave').addEventListener('click',saveEntry);
+document.getElementById('entryFields').addEventListener('click',function(ev){
+  var b=ev.target.closest('[data-help]');
+  if(b)openRules(parseInt(b.getAttribute('data-help'),10));
+});
+document.getElementById('logList').addEventListener('click',function(ev){
+  var d=ev.target.closest('[data-del]');
+  if(d){pendingDelete=d.getAttribute('data-del');renderLog();return;}
+  if(ev.target.closest('[data-cancel]')){pendingDelete=null;renderLog();return;}
+  var c=ev.target.closest('[data-confirm]');
+  if(c){
+    var id=c.getAttribute('data-confirm');
+    entries=entries.filter(function(e){return e.id!==id;});
+    pendingDelete=null;persist();renderLog();
+  }
+});
+document.getElementById('btnSort').addEventListener('click',function(){
+  sortDesc=!sortDesc;pendingDelete=null;renderLog();
+});
+document.getElementById('btnExport').addEventListener('click',exportCSV);
+document.getElementById('btnExport2').addEventListener('click',exportCSV);
+document.getElementById('btnCfgSave').addEventListener('click',function(){
+  var v=readCfgForm();
+  if(v.some(function(c){return !c.name;})){alert('Donne un nom aux trois colonnes.');return;}
+  cfg=v;
+  if(!persist())return;
+  renderEntry();show('entry');hint('Paramètres enregistrés.');
+});
+document.getElementById('btnClear').addEventListener('click',function(){
+  if(!entries.length){hint('L\u2019historique est déjà vide.');return;}
+  var n=entries.length;
+  if(!confirm("Vider l\u2019historique ?\n\n"+n+" saisie(s) seront supprimées définitivement.\nTes colonnes et leurs règles sont conservées."))return;
+  if(confirm("Exporter une sauvegarde CSV avant de vider ?"))exportCSV();
+  entries=[];pendingDelete=null;
+  if(!persist())return;
+  renderLog();hint('Historique vidé.');
+});
+
+document.getElementById('btnReset').addEventListener('click',function(){
+  if(!confirm("Effacer les "+entries.length+" saisie(s) ET la configuration des colonnes ? Cette action est définitive."))return;
+  if(!confirm("Dernière confirmation. Tout sera perdu."))return;
+  cfg=null;entries=[];pendingDelete=null;
+  try{localStorage.removeItem(K_CFG);localStorage.removeItem(K_ENT);}catch(e){}
+  cfgForm(document.getElementById('setupFields'),[{},{},{}]);
+  show('setup');
+});
+document.getElementById('btnRules').addEventListener('click',function(){openRules(null);});
+document.getElementById('btnSettings').addEventListener('click',function(){
+  cfgForm(document.getElementById('cfgFields'),cfg);show('settings');
+});
+document.getElementById('btnSheetClose').addEventListener('click',function(){
+  document.getElementById('sheet').hidden=true;
+});
+document.getElementById('sheet').addEventListener('click',function(ev){
+  if(ev.target===this)this.hidden=true;
+});
+document.getElementById('tabEntry').addEventListener('click',function(){show('entry');});
+document.getElementById('tabLog').addEventListener('click',function(){pendingDelete=null;renderLog();show('log');});
+
+load();
+if(cfg&&(!Array.isArray(cfg)||cfg.length!==3))cfg=null;
+if(cfg){renderEntry();renderLog();show('entry');}
+else{cfgForm(document.getElementById('setupFields'),[{},{},{}]);show('setup');}
+blossom();
+
+var note=document.getElementById('storageNote');
+if(navigator.storage&&navigator.storage.persist){
+  navigator.storage.persisted().then(function(p){
+    if(p){note.textContent="Stockage marqué comme persistant : le navigateur ne l\u2019effacera pas pour libérer de la place.";return;}
+    return navigator.storage.persist().then(function(g){
+      note.textContent=g
+        ? "Stockage marqué comme persistant : le navigateur ne l\u2019effacera pas pour libérer de la place."
+        : "Stockage non persistant : le navigateur peut effacer les données s\u2019il manque d\u2019espace. Exporte régulièrement en CSV.";
+    });
+  }).catch(function(){note.textContent="État du stockage inconnu. Exporte régulièrement en CSV.";});
+}else{
+  note.textContent="Ce navigateur ne gère pas le stockage persistant. Exporte régulièrement en CSV.";
+}
+
+if('serviceWorker' in navigator&&location.protocol.indexOf('http')===0){
+  navigator.serviceWorker.register('sw.js').catch(function(){});
+}
+})();
+</script>
+</body>
+</html>
