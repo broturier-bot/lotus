@@ -2,7 +2,7 @@
    Stratégie : on sert le cache immédiatement, on rafraîchit en arrière-plan.
    Les saisies ne passent pas par ici : elles vivent dans localStorage. */
 
-var CACHE = 'lotus-v4';
+var CACHE = 'lotus-v5';
 var ASSETS = ['./', './index.html', './manifest.json'];
 
 self.addEventListener('install', function (e) {

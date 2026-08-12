@@ -28,6 +28,7 @@
   --tab-h:72px;
 }
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 html,body{margin:0;padding:0}
 body{
   min-height:100vh;
@@ -238,6 +239,10 @@ main{
 .note{color:var(--stem);font-size:14px;margin:0 0 16px;line-height:1.55}
 
 /* ---------- fiche image ---------- */
+.visually-hidden{
+  position:absolute;width:1px;height:1px;padding:0;margin:-1px;
+  overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;
+}
 .imgbox{
   background:var(--mist);border:1px solid var(--line);border-radius:var(--r);
   box-shadow:var(--shadow);padding:14px;margin-bottom:13px;
@@ -369,7 +374,7 @@ main{
       <div class="imgprev" id="imgPrev"></div>
       <div class="imgmeta eyebrow" id="imgMeta">Aucune fiche chargée</div>
     </div>
-    <input type="file" id="imgInput" accept="image/*" hidden>
+    <input type="file" id="imgInput" accept="image/*" class="visually-hidden">
     <button class="btn ghost" id="btnPickImg">Choisir une image</button>
     <button class="btn danger" id="btnDropImg" hidden>Retirer la fiche</button>
 
@@ -683,7 +688,14 @@ function vFit(){
   vz.s=vz.min;vClamp();vApply();
 }
 function openViewer(){
-  if(!sheetImg)return;
+  if(!sheetImg){
+    if(confirm("Aucune fiche n\u2019est chargée.\n\nOuvrir les paramètres pour en choisir une ?")){
+      cfgForm(document.getElementById('cfgFields'),cfg);
+      show('settings');
+      document.getElementById('btnPickImg').scrollIntoView({block:'center'});
+    }
+    return;
+  }
   var v=document.getElementById('viewer'),im=document.getElementById('viewerImg');
   v.hidden=false;
   im.onload=vFit;
