@@ -237,6 +237,45 @@ main{
 .cfg input:focus,.cfg textarea:focus{border-bottom-color:var(--leaf)}
 .note{color:var(--stem);font-size:14px;margin:0 0 16px;line-height:1.55}
 
+/* ---------- fiche image ---------- */
+.imgbox{
+  background:var(--mist);border:1px solid var(--line);border-radius:var(--r);
+  box-shadow:var(--shadow);padding:14px;margin-bottom:13px;
+}
+.imgprev{
+  display:none;width:100%;height:170px;
+  border-radius:16px;background:var(--water) center/contain no-repeat;
+  border:1px solid var(--line);margin-bottom:11px;
+}
+.imgprev.on{display:block}
+.imgmeta{text-align:center;padding:4px 0}
+.viewer{
+  position:fixed;inset:0;z-index:60;
+  display:flex;flex-direction:column;
+  background:#0E211C;
+}
+.viewer[hidden]{display:none}
+.viewer-bar{
+  display:flex;align-items:center;gap:12px;
+  padding:calc(env(safe-area-inset-top,0px) + 12px) 16px 12px;
+  color:rgba(243,247,245,.72);
+}
+.viewer-hint{flex:1;font-size:12px;letter-spacing:.04em}
+.viewer-close{
+  flex:none;width:44px;height:44px;padding:0;line-height:1;font-size:26px;
+  background:rgba(243,247,245,.1);border:0;border-radius:50%;color:#F3F7F5;
+}
+.viewer-stage{
+  flex:1;overflow:hidden;position:relative;
+  touch-action:none;user-select:none;-webkit-user-select:none;
+}
+.viewer-stage img{
+  position:absolute;top:0;left:0;
+  transform-origin:0 0;
+  -webkit-user-drag:none;user-select:none;
+  max-width:none;
+}
+
 /* ---------- onglets ---------- */
 .tabs{
   position:fixed;left:0;right:0;bottom:0;z-index:30;
@@ -286,6 +325,9 @@ main{
     <h1 id="title">Lotus</h1>
     <p class="eyebrow" id="subtitle">Saisie du jour</p>
   </div>
+  <button class="iconbtn" id="btnSheetImg" title="Fiche des champs" aria-label="Fiche des champs" hidden>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.2" y="4.6" width="17.6" height="14.8" rx="2.4"/><circle cx="8.6" cy="9.8" r="1.5"/><path d="M3.6 16.4l4.6-4.2a1.7 1.7 0 0 1 2.3 0l3.5 3.3"/><path d="M13.4 13.2l1.9-1.7a1.7 1.7 0 0 1 2.3 0l2.8 2.6"/></svg>
+  </button>
   <button class="iconbtn" id="btnRules" title="Règles de saisie" aria-label="Règles de saisie">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.2A1.7 1.7 0 0 1 5.7 3.5H19v17H5.7A1.7 1.7 0 0 1 4 18.8z"/><path d="M4 17h15"/><path d="M8 7.5h7M8 11h7"/></svg>
   </button>
@@ -321,6 +363,16 @@ main{
     <p class="note">Renommer une colonne ne touche pas aux saisies déjà faites : chacune garde l'intitulé qui était en place le jour où tu l'as écrite.</p>
     <div id="cfgFields"></div>
     <button class="btn" id="btnCfgSave">Enregistrer les modifications</button>
+    <div class="sec eyebrow">Fiche des champs</div>
+    <p class="note">Une image de référence, consultable depuis l&rsquo;icône en haut de l&rsquo;écran. Elle est redimensionnée automatiquement et reste sur ton téléphone.</p>
+    <div class="imgbox" id="imgBox">
+      <div class="imgprev" id="imgPrev"></div>
+      <div class="imgmeta eyebrow" id="imgMeta">Aucune fiche chargée</div>
+    </div>
+    <input type="file" id="imgInput" accept="image/*" hidden>
+    <button class="btn ghost" id="btnPickImg">Choisir une image</button>
+    <button class="btn danger" id="btnDropImg" hidden>Retirer la fiche</button>
+
     <div class="sec eyebrow">Données</div>
     <button class="btn ghost" id="btnExport2">Exporter en CSV</button>
     <button class="btn danger" id="btnClear">Vider l&rsquo;historique</button>
@@ -342,6 +394,16 @@ main{
   </button>
 </nav>
 
+<div class="viewer" id="viewer" hidden>
+  <div class="viewer-bar">
+    <span class="viewer-hint">Pince pour zoomer &middot; double-tape pour ajuster</span>
+    <button class="viewer-close" id="btnViewerClose" aria-label="Fermer">&times;</button>
+  </div>
+  <div class="viewer-stage" id="viewerStage">
+    <img id="viewerImg" alt="Fiche des champs" draggable="false">
+  </div>
+</div>
+
 <div class="sheet" id="sheet" hidden>
   <div class="sheet-inner" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
     <h2 id="sheetTitle">Règles de saisie</h2>
@@ -354,8 +416,8 @@ main{
 (function(){
 "use strict";
 
-var K_CFG='t3.config', K_ENT='t3.entries';
-var cfg=null, entries=[], sortDesc=true, pendingDelete=null;
+var K_CFG='t3.config', K_ENT='t3.entries', K_IMG='t3.sheetimg';
+var cfg=null, entries=[], sortDesc=true, pendingDelete=null, sheetImg=null;
 
 function banner(msg){var b=document.getElementById('banner');b.textContent=msg;b.hidden=false;}
 function load(){
@@ -363,9 +425,10 @@ function load(){
     cfg=JSON.parse(localStorage.getItem(K_CFG)||'null');
     entries=JSON.parse(localStorage.getItem(K_ENT)||'[]');
     if(!Array.isArray(entries))entries=[];
+    sheetImg=localStorage.getItem(K_IMG)||null;
   }catch(e){
     banner("Impossible de lire les données enregistrées. Le stockage du navigateur est peut-être bloqué.");
-    cfg=null;entries=[];
+    cfg=null;entries=[];sheetImg=null;
   }
 }
 function persist(){
@@ -403,6 +466,7 @@ function show(name){
   });
   document.getElementById('tabs').hidden=!cfg;
   document.getElementById('btnRules').style.display=cfg?'':'none';
+  document.getElementById('btnSheetImg').hidden=!(cfg&&sheetImg);
   document.getElementById('btnSettings').style.display=cfg?'':'none';
   document.getElementById('tabEntry').setAttribute('aria-selected',name==='entry');
   document.getElementById('tabLog').setAttribute('aria-selected',name==='log');
@@ -540,6 +604,150 @@ function exportCSV(){
   setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},1000);
 }
 
+/* ===== Fiche des champs =====
+   Stockée dans sa propre clé : un échec de quota sur l'image
+   ne doit jamais empêcher l'enregistrement d'une saisie. */
+var IMG_MAX_PX=1800, IMG_MAX_BYTES=1200000;
+
+function shrink(file,cb){
+  var url=URL.createObjectURL(file);
+  var im=new Image();
+  im.onload=function(){
+    URL.revokeObjectURL(url);
+    var w=im.naturalWidth,h=im.naturalHeight;
+    var k=Math.min(1,IMG_MAX_PX/Math.max(w,h));
+    var cv=document.createElement('canvas');
+    cv.width=Math.round(w*k);cv.height=Math.round(h*k);
+    var cx=cv.getContext('2d');
+    cx.fillStyle='#fff';cx.fillRect(0,0,cv.width,cv.height);
+    cx.drawImage(im,0,0,cv.width,cv.height);
+    var q=0.9,out=cv.toDataURL('image/jpeg',q);
+    while(out.length>IMG_MAX_BYTES&&q>0.35){q-=0.1;out=cv.toDataURL('image/jpeg',q);}
+    if(out.length>IMG_MAX_BYTES){
+      k=0.7;
+      var cv2=document.createElement('canvas');
+      cv2.width=Math.round(cv.width*k);cv2.height=Math.round(cv.height*k);
+      var c2=cv2.getContext('2d');
+      c2.fillStyle='#fff';c2.fillRect(0,0,cv2.width,cv2.height);
+      c2.drawImage(cv,0,0,cv2.width,cv2.height);
+      out=cv2.toDataURL('image/jpeg',0.7);
+    }
+    cb(null,out,cv.width,cv.height);
+  };
+  im.onerror=function(){URL.revokeObjectURL(url);cb(new Error('lecture impossible'));};
+  im.src=url;
+}
+
+function renderImgBox(){
+  var prev=document.getElementById('imgPrev');
+  var meta=document.getElementById('imgMeta');
+  var drop=document.getElementById('btnDropImg');
+  var btn=document.getElementById('btnSheetImg');
+  var pick=document.getElementById('btnPickImg');
+  if(sheetImg){
+    prev.style.backgroundImage='url("'+sheetImg+'")';
+    prev.classList.add('on');
+    meta.textContent=Math.round(sheetImg.length/1400)+' Ko environ';
+    drop.hidden=false;
+    pick.textContent='Remplacer l\u2019image';
+    if(cfg)btn.hidden=false;
+  }else{
+    prev.classList.remove('on');
+    prev.style.backgroundImage='';
+    meta.textContent='Aucune fiche chargée';
+    drop.hidden=true;
+    pick.textContent='Choisir une image';
+    btn.hidden=true;
+  }
+}
+
+/* ---- visionneuse : pincement, glisser, double-tape ---- */
+var vz={s:1,x:0,y:0,min:1,nw:0,nh:0};
+function vApply(){
+  document.getElementById('viewerImg').style.transform=
+    'translate('+vz.x+'px,'+vz.y+'px) scale('+vz.s+')';
+}
+function vClamp(){
+  var st=document.getElementById('viewerStage');
+  var W=st.clientWidth,H=st.clientHeight;
+  var w=vz.nw*vz.s,h=vz.nh*vz.s;
+  vz.x = w<=W ? (W-w)/2 : Math.min(0,Math.max(W-w,vz.x));
+  vz.y = h<=H ? (H-h)/2 : Math.min(0,Math.max(H-h,vz.y));
+}
+function vFit(){
+  var st=document.getElementById('viewerStage');
+  var im=document.getElementById('viewerImg');
+  vz.nw=im.naturalWidth;vz.nh=im.naturalHeight;
+  if(!vz.nw)return;
+  vz.min=Math.min(st.clientWidth/vz.nw, st.clientHeight/vz.nh);
+  vz.s=vz.min;vClamp();vApply();
+}
+function openViewer(){
+  if(!sheetImg)return;
+  var v=document.getElementById('viewer'),im=document.getElementById('viewerImg');
+  v.hidden=false;
+  im.onload=vFit;
+  im.src=sheetImg;
+  if(im.complete)vFit();
+}
+function initViewer(){
+  var st=document.getElementById('viewerStage');
+  var pts={},startD=0,startS=1,startX=0,startY=0,cx0=0,cy0=0,lastTap=0;
+  function centre(){
+    var k=Object.keys(pts);
+    if(k.length<2)return {x:pts[k[0]].x,y:pts[k[0]].y};
+    return {x:(pts[k[0]].x+pts[k[1]].x)/2,y:(pts[k[0]].y+pts[k[1]].y)/2};
+  }
+  function dist(){
+    var k=Object.keys(pts);
+    if(k.length<2)return 0;
+    return Math.hypot(pts[k[0]].x-pts[k[1]].x,pts[k[0]].y-pts[k[1]].y);
+  }
+  st.addEventListener('pointerdown',function(e){
+    st.setPointerCapture(e.pointerId);
+    pts[e.pointerId]={x:e.clientX,y:e.clientY};
+    var n=Object.keys(pts).length;
+    if(n===1){
+      var now=Date.now();
+      if(now-lastTap<300){
+        vz.s = vz.s>vz.min*1.6 ? vz.min : vz.min*2.6;
+        vClamp();vApply();
+      }
+      lastTap=now;
+      startX=vz.x;startY=vz.y;cx0=e.clientX;cy0=e.clientY;
+    }else if(n===2){
+      startD=dist();startS=vz.s;
+      var c=centre();cx0=c.x;cy0=c.y;startX=vz.x;startY=vz.y;
+    }
+  });
+  st.addEventListener('pointermove',function(e){
+    if(!pts[e.pointerId])return;
+    pts[e.pointerId]={x:e.clientX,y:e.clientY};
+    var n=Object.keys(pts).length;
+    var r=st.getBoundingClientRect();
+    if(n===1){
+      vz.x=startX+(e.clientX-cx0);vz.y=startY+(e.clientY-cy0);
+    }else if(n>=2&&startD>0){
+      var f=dist()/startD;
+      var ns=Math.min(vz.min*8,Math.max(vz.min*0.9,startS*f));
+      var px=cx0-r.left,py=cy0-r.top;
+      vz.x=px-(px-startX)*(ns/startS);
+      vz.y=py-(py-startY)*(ns/startS);
+      vz.s=ns;
+    }
+    vClamp();vApply();
+  });
+  function up(e){
+    delete pts[e.pointerId];
+    if(!Object.keys(pts).length&&vz.s<vz.min*1.02){vz.s=vz.min;vClamp();vApply();}
+  }
+  st.addEventListener('pointerup',up);
+  st.addEventListener('pointercancel',up);
+  window.addEventListener('resize',function(){
+    if(!document.getElementById('viewer').hidden)vFit();
+  });
+}
+
 function openRules(only){
   var html='';
   cfg.forEach(function(c,i){
@@ -602,11 +810,47 @@ document.getElementById('btnClear').addEventListener('click',function(){
 document.getElementById('btnReset').addEventListener('click',function(){
   if(!confirm("Effacer les "+entries.length+" saisie(s) ET la configuration des colonnes ? Cette action est définitive."))return;
   if(!confirm("Dernière confirmation. Tout sera perdu."))return;
-  cfg=null;entries=[];pendingDelete=null;
-  try{localStorage.removeItem(K_CFG);localStorage.removeItem(K_ENT);}catch(e){}
+  cfg=null;entries=[];pendingDelete=null;sheetImg=null;
+  try{localStorage.removeItem(K_CFG);localStorage.removeItem(K_ENT);localStorage.removeItem(K_IMG);}catch(e){}
+  renderImgBox();
   cfgForm(document.getElementById('setupFields'),[{},{},{}]);
   show('setup');
 });
+document.getElementById('btnPickImg').addEventListener('click',function(){
+  document.getElementById('imgInput').click();
+});
+document.getElementById('imgInput').addEventListener('change',function(ev){
+  var f=ev.target.files&&ev.target.files[0];
+  ev.target.value='';
+  if(!f)return;
+  if(!/^image\//.test(f.type)){alert("Ce fichier n\u2019est pas une image.");return;}
+  var meta=document.getElementById('imgMeta');
+  meta.textContent='Traitement en cours…';
+  shrink(f,function(err,dataUrl){
+    if(err){meta.textContent='Image illisible';alert("Impossible de lire cette image.");return;}
+    var prev=sheetImg;
+    try{
+      localStorage.setItem(K_IMG,dataUrl);
+      sheetImg=dataUrl;
+      renderImgBox();
+      hint('Fiche enregistrée.');
+    }catch(e){
+      sheetImg=prev;
+      renderImgBox();
+      alert("Pas assez de place pour cette image. Tes saisies sont intactes.\n\nEssaie une image plus petite, ou exporte puis vide l\u2019historique.");
+    }
+  });
+});
+document.getElementById('btnDropImg').addEventListener('click',function(){
+  if(!confirm("Retirer la fiche des champs ? Tes saisies ne sont pas touchées."))return;
+  try{localStorage.removeItem(K_IMG);}catch(e){}
+  sheetImg=null;renderImgBox();hint('Fiche retirée.');
+});
+document.getElementById('btnSheetImg').addEventListener('click',openViewer);
+document.getElementById('btnViewerClose').addEventListener('click',function(){
+  document.getElementById('viewer').hidden=true;
+});
+
 document.getElementById('btnRules').addEventListener('click',function(){openRules(null);});
 document.getElementById('btnSettings').addEventListener('click',function(){
   cfgForm(document.getElementById('cfgFields'),cfg);show('settings');
@@ -617,6 +861,12 @@ document.getElementById('btnSheetClose').addEventListener('click',function(){
 document.getElementById('sheet').addEventListener('click',function(ev){
   if(ev.target===this)this.hidden=true;
 });
+document.addEventListener('keydown',function(e){
+  if(e.key!=='Escape')return;
+  var v=document.getElementById('viewer');
+  if(!v.hidden){v.hidden=true;return;}
+  document.getElementById('sheet').hidden=true;
+});
 document.getElementById('tabEntry').addEventListener('click',function(){show('entry');});
 document.getElementById('tabLog').addEventListener('click',function(){pendingDelete=null;renderLog();show('log');});
 
@@ -624,6 +874,8 @@ load();
 if(cfg&&(!Array.isArray(cfg)||cfg.length!==3))cfg=null;
 if(cfg){renderEntry();renderLog();show('entry');}
 else{cfgForm(document.getElementById('setupFields'),[{},{},{}]);show('setup');}
+initViewer();
+renderImgBox();
 blossom();
 
 var note=document.getElementById('storageNote');
