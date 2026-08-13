@@ -378,6 +378,13 @@ main{
     <button class="btn ghost" id="btnPickImg">Choisir une image</button>
     <button class="btn danger" id="btnDropImg" hidden>Retirer la fiche</button>
 
+    <div class="sec eyebrow">Sauvegarde du paramétrage</div>
+    <p class="note">Un fichier unique contenant le nom des colonnes, leurs règles et la fiche image — à garder pour toi, ou à envoyer à quelqu&rsquo;un qui utilisera le même carnet que toi. Il ne contient pas tes saisies.</p>
+    <button class="btn ghost" id="btnShareCfg" hidden>Partager le paramétrage</button>
+    <button class="btn ghost" id="btnExportCfg">Exporter dans un fichier</button>
+    <input type="file" id="cfgInput" accept="application/json,.json" class="visually-hidden">
+    <button class="btn ghost" id="btnImportCfg">Importer un paramétrage</button>
+
     <div class="sec eyebrow">Données</div>
     <button class="btn ghost" id="btnExport2">Exporter en CSV</button>
     <button class="btn danger" id="btnClear">Vider l&rsquo;historique</button>
@@ -760,6 +767,101 @@ function initViewer(){
   });
 }
 
+/* ===== Sauvegarde du paramétrage =====
+   Un seul fichier JSON : colonnes, règles et fiche image (déjà en base64).
+   Pas de ZIP : cela imposerait une bibliothèque externe, donc une
+   dépendance réseau incompatible avec le fonctionnement hors ligne. */
+var CFG_FORMAT='lotus-config';
+
+function configBlob(){
+  var payload={
+    format:CFG_FORMAT,
+    version:1,
+    exported:new Date().toISOString(),
+    columns:cfg.map(function(c){return {name:c.name||'',desc:c.desc||''};}),
+    sheetImage:sheetImg||null
+  };
+  return new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+}
+function configName(){
+  return 'lotus-parametrage-'+new Date().toISOString().slice(0,10)+'.json';
+}
+
+function exportConfig(){
+  if(!cfg){hint('Rien à exporter.');return;}
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(configBlob());
+  a.download=configName();
+  document.body.appendChild(a);a.click();
+  setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},1000);
+  hint('Paramétrage exporté.');
+}
+
+/* Partage direct via le sélecteur Android, quand le navigateur le permet. */
+function canShareFiles(){
+  if(!navigator.canShare||!navigator.share||typeof File==='undefined')return false;
+  try{
+    return navigator.canShare({files:[new File(['{}'],'t.json',{type:'application/json'})]});
+  }catch(e){return false;}
+}
+function shareConfig(){
+  if(!cfg){hint('Rien à partager.');return;}
+  var f=new File([configBlob()],configName(),{type:'application/json'});
+  navigator.share({
+    files:[f],
+    title:'Paramétrage Lotus',
+    text:'Le paramétrage de mon carnet Lotus. Ouvre l\u2019appli, puis Paramètres \u2192 Importer un paramétrage.'
+  }).then(function(){hint('Paramétrage partagé.');})
+    .catch(function(e){
+      if(e&&e.name==='AbortError')return;
+      exportConfig();
+    });
+}
+
+function importConfig(file){
+  var r=new FileReader();
+  r.onerror=function(){alert("Impossible de lire ce fichier.");};
+  r.onload=function(){
+    var d;
+    try{d=JSON.parse(r.result);}
+    catch(e){alert("Ce fichier n\u2019est pas un paramétrage Lotus valide (JSON illisible).");return;}
+
+    if(!d||d.format!==CFG_FORMAT||!Array.isArray(d.columns)||d.columns.length!==3){
+      alert("Ce fichier n\u2019est pas un paramétrage Lotus valide.");return;
+    }
+    var cols=d.columns.map(function(c){
+      return {name:String((c&&c.name)||'').slice(0,40),
+              desc:String((c&&c.desc)||'').slice(0,600)};
+    });
+    if(cols.some(function(c){return !c.name;})){
+      alert("Ce paramétrage est incomplet : une colonne n\u2019a pas de nom.");return;
+    }
+    var img=(typeof d.sheetImage==='string'&&/^data:image\//.test(d.sheetImage))?d.sheetImage:null;
+
+    var resume='Colonnes du fichier :\n\n'
+      + cols.map(function(c,i){return (i+1)+'. '+c.name+(c.desc?'  (règle définie)':'');}).join('\n')
+      + '\n\nFiche image : '+(img?'incluse':'aucune')
+      + '\n\nCe paramétrage remplacera l\u2019actuel.'
+      + (entries.length?('\nTes '+entries.length+' saisie(s) sont conservées, avec les intitulés d\u2019origine.'):'');
+    if(!confirm(resume))return;
+
+    var prevCfg=cfg, prevImg=sheetImg;
+    cfg=cols;
+    if(!persist()){cfg=prevCfg;return;}
+    if(img){
+      try{localStorage.setItem(K_IMG,img);sheetImg=img;}
+      catch(e){
+        sheetImg=prevImg;
+        alert("Le paramétrage est importé, mais l\u2019image n\u2019a pas pu être enregistrée : pas assez de place.");
+      }
+    }
+    renderEntry();renderImgBox();renderLog();
+    cfgForm(document.getElementById('cfgFields'),cfg);
+    show('entry');blossom();hint('Paramétrage importé.');
+  };
+  r.readAsText(file);
+}
+
 function openRules(only){
   var html='';
   cfg.forEach(function(c,i){
@@ -828,6 +930,17 @@ document.getElementById('btnReset').addEventListener('click',function(){
   cfgForm(document.getElementById('setupFields'),[{},{},{}]);
   show('setup');
 });
+document.getElementById('btnExportCfg').addEventListener('click',exportConfig);
+document.getElementById('btnShareCfg').addEventListener('click',shareConfig);
+document.getElementById('btnImportCfg').addEventListener('click',function(){
+  document.getElementById('cfgInput').click();
+});
+document.getElementById('cfgInput').addEventListener('change',function(ev){
+  var f=ev.target.files&&ev.target.files[0];
+  ev.target.value='';
+  if(f)importConfig(f);
+});
+
 document.getElementById('btnPickImg').addEventListener('click',function(){
   document.getElementById('imgInput').click();
 });
@@ -888,6 +1001,7 @@ if(cfg){renderEntry();renderLog();show('entry');}
 else{cfgForm(document.getElementById('setupFields'),[{},{},{}]);show('setup');}
 initViewer();
 renderImgBox();
+if(canShareFiles())document.getElementById('btnShareCfg').hidden=false;
 blossom();
 
 var note=document.getElementById('storageNote');
