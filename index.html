@@ -238,6 +238,15 @@ main{
 .cfg input:focus,.cfg textarea:focus{border-bottom-color:var(--leaf)}
 .note{color:var(--stem);font-size:14px;margin:0 0 16px;line-height:1.55}
 
+/* ---------- fichier de sauvegarde ---------- */
+.filebox{
+  background:var(--mist);border:1px solid var(--line);border-radius:var(--r);
+  box-shadow:var(--shadow);padding:14px 16px;margin-bottom:13px;
+}
+.filestate{margin:0;font-size:13.5px;color:var(--stem);line-height:1.5}
+.filestate.ok{color:var(--leaf)}
+.filestate.warn{color:var(--lotus-ink)}
+
 /* ---------- fiche image ---------- */
 .visually-hidden{
   position:absolute;width:1px;height:1px;padding:0;margin:-1px;
@@ -378,6 +387,15 @@ main{
     <button class="btn ghost" id="btnPickImg">Choisir une image</button>
     <button class="btn danger" id="btnDropImg" hidden>Retirer la fiche</button>
 
+    <div class="sec eyebrow">Fichier de sauvegarde</div>
+    <p class="note">Tes données vivent dans le navigateur, et Chrome les efface si tu vides les données de site. Lier un fichier met une copie complète — colonnes, règles, fiche image et saisies — hors du navigateur, réécrite à chaque modification.</p>
+    <div class="filebox">
+      <p class="filestate" id="etatFichier">Aucun fichier de sauvegarde lié.</p>
+    </div>
+    <button class="btn ghost" id="btnLier">Lier un fichier</button>
+    <button class="btn ghost" id="btnOuvrirSauv">Ouvrir une sauvegarde</button>
+    <input type="file" id="fichierInput" accept="application/json,.json" class="visually-hidden">
+
     <div class="sec eyebrow">Sauvegarde du paramétrage</div>
     <p class="note">Un fichier unique contenant le nom des colonnes, leurs règles et la fiche image — à garder pour toi, ou à envoyer à quelqu&rsquo;un qui utilisera le même carnet que toi. Il ne contient pas tes saisies.</p>
     <button class="btn ghost" id="btnShareCfg" hidden>Partager le paramétrage</button>
@@ -447,6 +465,7 @@ function persist(){
   try{
     localStorage.setItem(K_CFG,JSON.stringify(cfg));
     localStorage.setItem(K_ENT,JSON.stringify(entries));
+    planifierEcriture();
     return true;
   }catch(e){
     banner("Enregistrement impossible : le stockage est plein ou désactivé. Exporte tes données en CSV.");
@@ -767,6 +786,114 @@ function initViewer(){
   });
 }
 
+/* ===== Fichier de sauvegarde (File System Access) =====
+   localStorage est le magasin de travail ; le fichier est la source de
+   vérité. Il survit à un effacement des données de site. */
+var supportFS = ('showSaveFilePicker' in window);
+var fichier = null, ecritureEnAttente = null;
+
+function idb(mode, action){
+  return new Promise(function(ok, ko){
+    var r = indexedDB.open('lotus', 1);
+    r.onupgradeneeded = function(){ r.result.createObjectStore('kv'); };
+    r.onerror = function(){ ko(r.error); };
+    r.onsuccess = function(){
+      var t = r.result.transaction('kv', mode);
+      var q = action(t.objectStore('kv'));
+      t.oncomplete = function(){ ok(q && q.result); };
+      t.onerror = function(){ ko(t.error); };
+    };
+  });
+}
+
+/* Ce qui part dans le fichier : tout. */
+function paquet(){
+  return {
+    format:'lotus-sauvegarde',
+    version:1,
+    ecrit:new Date().toISOString(),
+    columns:(cfg||[]).map(function(c){return {name:c.name||'',desc:c.desc||''};}),
+    sheetImage:sheetImg||null,
+    entries:entries
+  };
+}
+
+/* Fusion : union des saisies par identifiant.
+   Colonnes et image ne sont reprises que si l'appli n'en a pas —
+   sinon une vieille sauvegarde renommerait la configuration courante. */
+function fusionner(d){
+  if(!d||typeof d!=='object')throw new Error('format');
+  var maj=false;
+
+  if(Array.isArray(d.entries)){
+    var vus={};
+    entries.forEach(function(e){vus[e.id]=true;});
+    d.entries.forEach(function(e){
+      if(!e||!e.id||vus[e.id])return;
+      if(!Array.isArray(e.values)||typeof e.ts!=='number')return;
+      entries.push({
+        id:String(e.id), ts:e.ts,
+        values:[String(e.values[0]||''),String(e.values[1]||''),String(e.values[2]||'')],
+        labels:Array.isArray(e.labels)?e.labels.map(String):null
+      });
+      maj=true;
+    });
+  }
+
+  if(!cfg && Array.isArray(d.columns) && d.columns.length===3){
+    var cols=d.columns.map(function(c){
+      return {name:String((c&&c.name)||'').slice(0,40),
+              desc:String((c&&c.desc)||'').slice(0,600)};
+    });
+    if(cols.every(function(c){return c.name;})){cfg=cols;maj=true;}
+  }
+  if(!sheetImg && typeof d.sheetImage==='string' && /^data:image\//.test(d.sheetImage)){
+    try{localStorage.setItem(K_IMG,d.sheetImage);sheetImg=d.sheetImage;maj=true;}catch(e){}
+  }
+
+  if(maj){
+    try{
+      localStorage.setItem(K_CFG,JSON.stringify(cfg));
+      localStorage.setItem(K_ENT,JSON.stringify(entries));
+    }catch(e){
+      banner("Les données du fichier n\u2019ont pas pu être toutes réenregistrées : stockage plein.");
+    }
+  }
+  if(cfg){renderEntry();renderLog();renderImgBox();}
+  return maj;
+}
+
+function etatFichier(txt,cls){
+  var el=document.getElementById('etatFichier');
+  if(!el)return;
+  el.textContent=txt;
+  el.className='filestate'+(cls?' '+cls:'');
+}
+
+function ecrireFichier(){
+  if(!fichier)return Promise.resolve();
+  return fichier.queryPermission({mode:'readwrite'}).then(function(p){
+    if(p!=='granted'){
+      etatFichier('Sauvegarde en attente d\u2019autorisation — touche « Lier un fichier ».','warn');
+      return;
+    }
+    return fichier.createWritable().then(function(w){
+      return w.write(JSON.stringify(paquet(),null,2)).then(function(){return w.close();});
+    }).then(function(){
+      etatFichier('Sauvegardé dans '+fichier.name+' à '+fTime.format(new Date())+'.','ok');
+    });
+  }).catch(function(){
+    etatFichier('Écriture impossible dans '+fichier.name+'.','warn');
+  });
+}
+
+/* Le fichier peut peser plus d'un Mo avec l'image : on regroupe les écritures. */
+function planifierEcriture(){
+  if(!fichier)return;
+  clearTimeout(ecritureEnAttente);
+  ecritureEnAttente=setTimeout(ecrireFichier,400);
+}
+
 /* ===== Sauvegarde du paramétrage =====
    Un seul fichier JSON : colonnes, règles et fiche image (déjà en base64).
    Pas de ZIP : cela imposerait une bibliothèque externe, donc une
@@ -930,6 +1057,64 @@ document.getElementById('btnReset').addEventListener('click',function(){
   cfgForm(document.getElementById('setupFields'),[{},{},{}]);
   show('setup');
 });
+document.getElementById('btnLier').addEventListener('click',function(){
+  if(!supportFS){exportConfig();return;}
+  var suite = (fichier)
+    ? fichier.requestPermission({mode:'readwrite'}).then(function(p){
+        if(p==='granted')return ecrireFichier();
+        return choisirFichier();
+      }).catch(choisirFichier)
+    : choisirFichier();
+  suite && suite.catch && suite.catch(function(){});
+});
+function choisirFichier(){
+  return window.showSaveFilePicker({
+    suggestedName:'lotus-sauvegarde.json',
+    startIn:'documents',
+    types:[{description:'Sauvegarde Lotus',accept:{'application/json':['.json']}}]
+  }).then(function(h){
+    fichier=h;
+    return idb('readwrite',function(st){return st.put(fichier,'fichier');});
+  }).then(ecrireFichier).catch(function(){});
+}
+
+document.getElementById('btnOuvrirSauv').addEventListener('click',function(){
+  if(!supportFS){document.getElementById('fichierInput').click();return;}
+  window.showOpenFilePicker({types:[{description:'Sauvegarde Lotus',accept:{'application/json':['.json']}}]})
+  .then(function(res){
+    var h=res[0];
+    return h.getFile().then(function(f){return f.text();}).then(function(t){
+      var maj=fusionner(JSON.parse(t));
+      hint(maj?'Sauvegarde restaurée.':'Rien de nouveau dans ce fichier.');
+      if(cfg)show('entry');
+      return h.requestPermission({mode:'readwrite'}).then(function(p){
+        if(p!=='granted')return;
+        fichier=h;
+        return idb('readwrite',function(st){return st.put(fichier,'fichier');}).then(ecrireFichier);
+      });
+    });
+  }).catch(function(e){
+    if(e&&e.name==='AbortError')return;
+    alert("Fichier illisible ou format inattendu.");
+  });
+});
+
+document.getElementById('fichierInput').addEventListener('change',function(ev){
+  var f=ev.target.files&&ev.target.files[0];
+  ev.target.value='';
+  if(!f)return;
+  var r=new FileReader();
+  r.onload=function(){
+    try{
+      var maj=fusionner(JSON.parse(r.result));
+      hint(maj?'Sauvegarde restaurée.':'Rien de nouveau dans ce fichier.');
+      if(cfg)show('entry');
+    }catch(e){alert("Fichier illisible ou format inattendu.");}
+  };
+  r.onerror=function(){alert("Impossible de lire ce fichier.");};
+  r.readAsText(f);
+});
+
 document.getElementById('btnExportCfg').addEventListener('click',exportConfig);
 document.getElementById('btnShareCfg').addEventListener('click',shareConfig);
 document.getElementById('btnImportCfg').addEventListener('click',function(){
@@ -958,6 +1143,7 @@ document.getElementById('imgInput').addEventListener('change',function(ev){
       localStorage.setItem(K_IMG,dataUrl);
       sheetImg=dataUrl;
       renderImgBox();
+      planifierEcriture();
       hint('Fiche enregistrée.');
     }catch(e){
       sheetImg=prev;
@@ -969,7 +1155,7 @@ document.getElementById('imgInput').addEventListener('change',function(ev){
 document.getElementById('btnDropImg').addEventListener('click',function(){
   if(!confirm("Retirer la fiche des champs ? Tes saisies ne sont pas touchées."))return;
   try{localStorage.removeItem(K_IMG);}catch(e){}
-  sheetImg=null;renderImgBox();hint('Fiche retirée.');
+  sheetImg=null;renderImgBox();planifierEcriture();hint('Fiche retirée.');
 });
 document.getElementById('btnSheetImg').addEventListener('click',openViewer);
 document.getElementById('btnViewerClose').addEventListener('click',function(){
@@ -1003,6 +1189,28 @@ initViewer();
 renderImgBox();
 if(canShareFiles())document.getElementById('btnShareCfg').hidden=false;
 blossom();
+
+if(!supportFS){
+  etatFichier("Ce navigateur ne sait pas écrire dans un fichier. Utilise l\u2019export du paramétrage comme sauvegarde.");
+}else{
+  idb('readonly',function(st){return st.get('fichier');}).then(function(h){
+    if(!h){etatFichier('Aucun fichier de sauvegarde lié.');return;}
+    fichier=h;
+    return fichier.queryPermission({mode:'readwrite'}).then(function(p){
+      if(p!=='granted'){
+        etatFichier('Fichier '+fichier.name+' lié — touche « Lier un fichier » pour réautoriser.','warn');
+        return;
+      }
+      return fichier.getFile().then(function(f){return f.text();}).then(function(t){
+        if(t&&t.trim()){
+          try{fusionner(JSON.parse(t));}catch(e){}
+        }
+        etatFichier('Lié à '+fichier.name+'.','ok');
+        if(cfg&&document.getElementById('viewSetup').hidden===false)show('entry');
+      });
+    });
+  }).catch(function(){etatFichier('Aucun fichier de sauvegarde lié.');});
+}
 
 var note=document.getElementById('storageNote');
 if(navigator.storage&&navigator.storage.persist){
