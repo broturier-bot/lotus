@@ -405,9 +405,14 @@ main{
 
     <div class="sec eyebrow">Données</div>
     <button class="btn ghost" id="btnExport2">Exporter en CSV</button>
+    <input type="file" id="csvInput" accept="text/csv,.csv" class="visually-hidden">
+    <button class="btn ghost" id="btnImportCsv">Importer un CSV</button>
     <button class="btn danger" id="btnClear">Vider l&rsquo;historique</button>
     <button class="btn danger" id="btnReset">Tout réinitialiser</button>
     <p class="note" style="margin-top:14px">Vider l&rsquo;historique efface les saisies et garde tes colonnes. Tout réinitialiser efface aussi les colonnes et leurs règles.</p>
+    <div class="sec eyebrow">Version</div>
+    <p class="note" id="verNote">Lotus v9 &mdash; import CSV, fichier de sauvegarde, partage du paramétrage.</p>
+
     <div class="sec eyebrow">Stockage</div>
     <p class="note" id="storageNote"></p>
   </section>
@@ -786,6 +791,83 @@ function initViewer(){
   });
 }
 
+/* ===== Import d'un CSV exporté précédemment =====
+   Rattrapage : le CSV ne conserve l'heure qu'à la minute, les secondes
+   sont donc perdues. Les doublons sont écartés par comparaison du
+   contenu, pas de l'identifiant (le CSV n'en contient pas). */
+function parseCSV(txt){
+  txt=txt.replace(/^\ufeff/,'');
+  var sep = (txt.split('\n')[0].split(';').length >= 3) ? ';' : ',';
+  var lignes=[],champ='',ligne=[],q=false;
+  for(var i=0;i<txt.length;i++){
+    var c=txt[i];
+    if(q){
+      if(c==='"'){ if(txt[i+1]==='"'){champ+='"';i++;} else q=false; }
+      else champ+=c;
+    }else{
+      if(c==='"')q=true;
+      else if(c===sep){ligne.push(champ);champ='';}
+      else if(c==='\n'){ligne.push(champ);lignes.push(ligne);ligne=[];champ='';}
+      else if(c==='\r'){}
+      else champ+=c;
+    }
+  }
+  if(champ.length||ligne.length){ligne.push(champ);lignes.push(ligne);}
+  return lignes.filter(function(l){return l.some(function(x){return x.trim();});});
+}
+
+function tsDepuis(dateStr,heureStr){
+  var d=String(dateStr).trim().match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
+  if(!d)return null;
+  var h=String(heureStr||'').trim().match(/^(\d{1,2})[:h](\d{2})/);
+  var dt=new Date(+d[3], +d[2]-1, +d[1], h?+h[1]:12, h?+h[2]:0, 0, 0);
+  return isNaN(dt.getTime())?null:dt.getTime();
+}
+
+function importCSV(texte){
+  var l=parseCSV(texte);
+  if(l.length<2)throw new Error('vide');
+  var tete=l[0];
+  if(tete.length<5)throw new Error('colonnes');
+
+  var noms=[tete[2],tete[3],tete[4]].map(function(x){return String(x||'').trim();});
+
+  var sign={};
+  entries.forEach(function(e){
+    sign[e.ts+'|'+(e.values||[]).join('\u0001')]=true;
+  });
+
+  var ajout=0, rejet=0;
+  for(var i=1;i<l.length;i++){
+    var r=l[i];
+    if(r.length<5){rejet++;continue;}
+    var ts=tsDepuis(r[0],r[1]);
+    if(ts===null){rejet++;continue;}
+    var vals=[String(r[2]||'').trim(),String(r[3]||'').trim(),String(r[4]||'').trim()];
+    if(!vals.some(function(v){return v;})){rejet++;continue;}
+    var k=ts+'|'+vals.join('\u0001');
+    if(sign[k]){continue;}
+    sign[k]=true;
+    entries.push({
+      id:'csv-'+ts+'-'+i+'-'+Math.random().toString(36).slice(2,6),
+      ts:ts, values:vals,
+      labels:noms.every(function(n){return n;})?noms.slice():null
+    });
+    ajout++;
+  }
+
+  var cfgCree=false;
+  if(!cfg && noms.every(function(n){return n;})){
+    cfg=noms.map(function(n){return {name:n.slice(0,40),desc:''};});
+    cfgCree=true;
+  }
+
+  if(ajout||cfgCree){
+    if(!persist())throw new Error('quota');
+  }
+  return {ajout:ajout, rejet:rejet, total:l.length-1, cfgCree:cfgCree};
+}
+
 /* ===== Fichier de sauvegarde (File System Access) =====
    localStorage est le magasin de travail ; le fichier est la source de
    vérité. Il survit à un effacement des données de site. */
@@ -1113,6 +1195,35 @@ document.getElementById('fichierInput').addEventListener('change',function(ev){
   };
   r.onerror=function(){alert("Impossible de lire ce fichier.");};
   r.readAsText(f);
+});
+
+document.getElementById('btnImportCsv').addEventListener('click',function(){
+  document.getElementById('csvInput').click();
+});
+document.getElementById('csvInput').addEventListener('change',function(ev){
+  var f=ev.target.files&&ev.target.files[0];
+  ev.target.value='';
+  if(!f)return;
+  var r=new FileReader();
+  r.onerror=function(){alert("Impossible de lire ce fichier.");};
+  r.onload=function(){
+    var res;
+    try{res=importCSV(r.result);}
+    catch(e){
+      alert(e&&e.message==='quota'
+        ? "Pas assez de place pour enregistrer toutes ces saisies."
+        : "Ce fichier ne ressemble pas à un CSV exporté par Lotus.\n\nIl doit commencer par une ligne Date;Heure;puis les trois colonnes.");
+      return;
+    }
+    var msg = res.ajout+' saisie(s) importée(s) sur '+res.total+' ligne(s).';
+    if(res.total-res.ajout-res.rejet>0)msg+='\n'+(res.total-res.ajout-res.rejet)+' déjà présente(s), ignorée(s).';
+    if(res.rejet)msg+='\n'+res.rejet+' ligne(s) illisible(s), ignorée(s).';
+    if(res.cfgCree)msg+='\n\nLes colonnes ont été recréées d\u2019après l\u2019en-tête du fichier.';
+    msg+='\n\nLes heures sont arrondies à la minute : le CSV ne conserve pas les secondes.';
+    alert(msg);
+    if(cfg){renderEntry();renderLog();cfgForm(document.getElementById('cfgFields'),cfg);show('log');}
+  };
+  r.readAsText(f,'utf-8');
 });
 
 document.getElementById('btnExportCfg').addEventListener('click',exportConfig);
